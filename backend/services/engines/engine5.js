@@ -1,60 +1,55 @@
 const { generateText } = require('../ai');
 
-const REWRITE_PROMPT = `You are an expert writing editor. Your task is to rewrite the provided text to improve it.
+const REWRITE_PROMPT = `You are a master human writer. Your task is to rewrite the text to sound completely natural, engaging, and human.
 
-RULES:
-- Improve readability, grammar, sentence flow, and clarity.
-- Remove awkward or repetitive phrasing.
-- Preserve the original meaning completely.
-- Preserve ALL facts, names, numbers, dates, and technical information exactly.
-- Never invent or add new information.
-- Never change the intent of the original text.
-- Return ONLY the rewritten text. No explanations, no notes, no commentary.`;
+CRITICAL RULES:
+- Preserve original length, detail, and explanations completely. Do NOT summarize or condense.
+- Use natural sentence length variation (burstiness).
+- Preserve all facts, names, dates, numbers, and technical terms.
+- Return ONLY the rewritten text.`;
 
-const JUDGE_PROMPT = `You are an expert writing quality judge. You will be given the ORIGINAL text and THREE rewritten versions.
+const JUDGE_PROMPT = `You are a senior publishing judge. Evaluate THREE rewritten versions of a text.
 
-Evaluate each version on these criteria (1-10 scale):
-1. Writing Quality - Grammar, sentence structure, word choice
-2. Readability - How easy and pleasant the text is to read
-3. Consistency - Uniform tone, style, and terminology
-4. Meaning Preservation - How well the original meaning is preserved
-5. Fact Preservation - Whether ALL facts, names, numbers, dates are preserved
+CRITERIA:
+1. Detail Preservation (Highest weight): Does it maintain the full length and detail of the original without summarizing?
+2. Natural Human Tone: Does it vary sentence lengths naturally and sound like a human writer?
+3. Flow & Clarity: Are paragraph transitions smooth and clear?
 
-Select the BEST version based on the highest overall quality.
+Select the BEST version.
 
 RESPOND WITH ONLY:
-- The word "VERSION" followed by the number (1, 2, or 3)
-- Then a blank line
-- Then the complete text of that version
-
-Example response format:
-VERSION 2
-
-[complete text of version 2 here]`;
+VERSION 1, VERSION 2, or VERSION 3
+Followed by a blank line, then the complete text of that version.`;
 
 /**
- * Engine 5: Multi-Candidate Selection
- * Generates 3 rewritten versions with varying temperatures,
- * then uses AI to evaluate and select the best one.
+ * Engine 5: Multi-Candidate Best-of-3 Engine
+ * Generates 3 candidates with varied prompts/temperatures, then uses AI to judge the best version based on detail preservation and natural tone.
  */
-async function rewrite(text) {
-  // Generate 3 versions with different temperature settings
+async function rewrite(text, contextText = '', isRetry = false) {
+  let basePrompt = `${REWRITE_PROMPT}\n\n`;
+  if (contextText) {
+    basePrompt += `PRECEDING CONTEXT:\n"${contextText}"\n\n`;
+  }
+  if (isRetry) {
+    basePrompt += `RETRY NOTICE: Write in full length and detail. Do not shorten.\n\n`;
+  }
+
+  // Generate 3 versions in parallel with different stylistic focuses
   const [version1, version2, version3] = await Promise.all([
     generateText(
-      `${REWRITE_PROMPT}\n\nRewrite the following text with a focus on clarity and precision:\n\n---\n${text}\n---`,
-      { temperature: 0.5 }
-    ),
-    generateText(
-      `${REWRITE_PROMPT}\n\nRewrite the following text with a focus on natural flow and readability:\n\n---\n${text}\n---`,
+      `${basePrompt}Focus on conversational clarity and dynamic sentence rhythms:\n\n---\n${text}\n---`,
       { temperature: 0.7 }
     ),
     generateText(
-      `${REWRITE_PROMPT}\n\nRewrite the following text with a focus on professional polish and elegance:\n\n---\n${text}\n---`,
+      `${basePrompt}Focus on elegant vocabulary and natural human flow:\n\n---\n${text}\n---`,
+      { temperature: 0.75 }
+    ),
+    generateText(
+      `${basePrompt}Focus on high sentence length variance (mix punchy short sentences with flowing longer sentences):\n\n---\n${text}\n---`,
       { temperature: 0.8 }
     ),
   ]);
 
-  // Use AI to judge and select the best version
   const judgePrompt = `${JUDGE_PROMPT}
 
 ORIGINAL TEXT:
@@ -77,24 +72,23 @@ VERSION 3:
 ${version3}
 ---`;
 
-  const judgement = await generateText(judgePrompt, { temperature: 0.3 });
-
-  // Extract the selected version text from the judgement
-  const versionMatch = judgement.match(/VERSION\s+(\d)/i);
-  if (versionMatch) {
-    const selectedNum = parseInt(versionMatch[1]);
-    const versions = [version1, version2, version3];
-    // Try to extract just the text after "VERSION N\n\n"
-    const textAfterHeader = judgement.replace(/VERSION\s+\d\s*/i, '').trim();
-    if (textAfterHeader.length > 50) {
-      return textAfterHeader;
+  try {
+    const judgement = await generateText(judgePrompt, { temperature: 0.3 });
+    const versionMatch = judgement.match(/VERSION\s+([123])/i);
+    if (versionMatch) {
+      const selectedNum = parseInt(versionMatch[1]);
+      const versions = [version1, version2, version3];
+      const textAfterHeader = judgement.replace(/VERSION\s+[123]\s*/i, '').trim();
+      if (textAfterHeader.length > 50) {
+        return textAfterHeader;
+      }
+      return versions[selectedNum - 1] || version2;
     }
-    // Fallback to the version directly
-    return versions[selectedNum - 1] || version1;
+  } catch (err) {
+    console.warn(`⚠️ Engine 5 judge error, defaulting to Candidate 2: ${err.message}`);
   }
 
-  // If parsing fails, return the first version
-  return version1;
+  return version2;
 }
 
 module.exports = { rewrite };

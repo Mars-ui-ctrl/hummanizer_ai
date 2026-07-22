@@ -1,54 +1,40 @@
 const { generateText } = require('../ai');
 
-const REWRITE_PROMPT = `You are an expert writing editor. Your task is to rewrite the provided text to improve it.
+const PASS1_PROMPT = `You are an expert human copywriter. Your task is to rewrite text to give it natural human voice, varied sentence lengths, and excellent flow.
 
 RULES:
-- Improve readability, grammar, sentence flow, and clarity.
-- Remove awkward or repetitive phrasing.
-- Preserve the original meaning completely.
-- Preserve ALL facts, names, numbers, dates, and technical information exactly.
-- Never invent or add new information.
-- Never change the intent of the original text.
-- Return ONLY the rewritten text. No explanations, no notes, no commentary.`;
+- Preserve original length, detail, and explanations completely. Do NOT summarize or shorten.
+- Vary sentence length and structure (mix short punchy statements with longer descriptive sentences).
+- Preserve all facts, names, dates, numbers, and technical terms exactly.
+- Return ONLY the rewritten text.`;
 
-const REVIEW_PROMPT = `You are an expert writing reviewer and editor. You have been given a rewritten version of a text.
+const PASS2_PROMPT = `You are a chief publication editor. Perform a SECOND REVIEW PASS on the rewritten text below.
 
-Your task is to perform a SECOND REVIEW PASS on this rewritten text.
-
-FOCUS ON:
-- Improving consistency in tone and style throughout the text.
-- Fixing any remaining grammar issues.
-- Improving sentence flow and transitions.
-- Smoothing out any awkward phrasing that was missed.
-
-RULES:
-- Preserve the original meaning completely.
-- Preserve ALL facts, names, numbers, dates, and technical information exactly.
-- Never invent or add new information.
-- Return ONLY the improved text. No explanations, no notes, no commentary.`;
+REVIEW FOCUS:
+- Ensure smooth transitions and natural sentence rhythms.
+- Eliminate awkward phrasing, mechanical repetition, or remaining rigid patterns.
+- Ensure sentence lengths vary dynamically.
+- CRITICAL: Maintain full original document length and depth. Do NOT condense paragraphs.
+- Return ONLY the finalized text.`;
 
 /**
- * Engine 2: Two-Pass Rewrite
- * First pass rewrites for quality. Second pass reviews for consistency and flow.
+ * Engine 2: Two-Pass Rewrite & Audit
+ * Pass 1 humanizes tone and sentence rhythm; Pass 2 audits flow, consistency, and detail preservation.
  */
-async function rewrite(text) {
-  // Pass 1: Initial rewrite
-  const firstPass = await generateText(`${REWRITE_PROMPT}
+async function rewrite(text, contextText = '', isRetry = false) {
+  let prompt1 = `${PASS1_PROMPT}\n\n`;
+  if (contextText) {
+    prompt1 += `PRECEDING CONTEXT (for transition flow only):\n"${contextText}"\n\n`;
+  }
+  if (isRetry) {
+    prompt1 += `RETRY WARNING: Do NOT condense or summarize. Match the full length and detail of the input.\n\n`;
+  }
+  prompt1 += `TEXT TO REWRITE:\n---\n${text}\n---`;
 
-Rewrite the following text:
+  const firstPass = await generateText(prompt1, { temperature: 0.7 });
 
----
-${text}
----`);
-
-  // Pass 2: Review and refine
-  const secondPass = await generateText(`${REVIEW_PROMPT}
-
-Review and improve this text:
-
----
-${firstPass}
----`);
+  let prompt2 = `${PASS2_PROMPT}\n\nREWRITTEN TEXT TO REVIEW AND POLISH:\n---\n${firstPass}\n---`;
+  const secondPass = await generateText(prompt2, { temperature: 0.6 });
 
   return secondPass;
 }

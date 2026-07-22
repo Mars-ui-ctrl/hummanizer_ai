@@ -1,18 +1,16 @@
 const { generateText } = require('../ai');
 
-const SYSTEM_PROMPT = `You are an expert writing editor. Your task is to rewrite the provided text to improve it.
+const SYSTEM_PROMPT = `You are an expert editor specializing in structural cleanup and human tone refinement.
 
-The text has already been pre-processed to clean up formatting issues. Now focus on:
-- Improving readability, grammar, sentence flow, and clarity.
-- Improving overall writing quality.
-- Ensuring consistent and professional tone.
+Your task is to take pre-processed, clean text and rewrite it with:
+- Natural sentence length variation (short, medium, long).
+- Rich, dynamic vocabulary tailored to the subject.
+- Full preservation of original length, scope, and technical details.
+- Zero summarization.
 
 RULES:
-- Preserve the original meaning completely.
-- Preserve ALL facts, names, numbers, dates, and technical information exactly.
-- Never invent or add new information.
-- Never change the intent of the original text.
-- Return ONLY the rewritten text. No explanations, no notes, no commentary.`;
+- Preserve all facts, names, numbers, dates, and technical details 100%.
+- Return ONLY the rewritten text.`;
 
 /**
  * Pre-process text before sending to AI:
@@ -38,21 +36,6 @@ function preProcess(text) {
   // Collapse 3+ newlines into 2
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
-  // Remove repeated consecutive sentences
-  const sentences = cleaned.split(/(?<=[.!?])\s+/);
-  const deduplicated = [];
-  const seen = new Set();
-
-  for (const sentence of sentences) {
-    const normalized = sentence.trim().toLowerCase();
-    if (normalized && !seen.has(normalized)) {
-      seen.add(normalized);
-      deduplicated.push(sentence.trim());
-    }
-  }
-
-  cleaned = deduplicated.join(' ');
-
   // Fix double punctuation
   cleaned = cleaned.replace(/([.!?]){2,}/g, '$1');
 
@@ -60,32 +43,29 @@ function preProcess(text) {
   cleaned = cleaned.replace(/\s+([.,;:!?])/g, '$1');
   cleaned = cleaned.replace(/([.,;:!?])(?=[A-Za-z])/g, '$1 ');
 
-  // Trim lines
-  cleaned = cleaned
-    .split('\n')
-    .map((line) => line.trim())
-    .join('\n');
-
   return cleaned.trim();
 }
 
 /**
- * Engine 4: Pre-Process + Rewrite
- * Cleans formatting, normalizes punctuation, removes repeated phrases,
- * then sends the cleaned text to AI for rewriting.
+ * Engine 4: Clean Structure & Polish
+ * Cleans formatting anomalies first, then performs a high-burstiness human rewrite.
  */
-async function rewrite(text) {
+async function rewrite(text, contextText = '', isRetry = false) {
   const cleanedText = preProcess(text);
 
-  const prompt = `${SYSTEM_PROMPT}
+  let prompt = `${SYSTEM_PROMPT}\n\n`;
 
-Rewrite the following pre-cleaned text:
+  if (contextText) {
+    prompt += `PRECEDING CONTEXT:\n"${contextText}"\n\n`;
+  }
 
----
-${cleanedText}
----`;
+  if (isRetry) {
+    prompt += `STRICT RETRY: Preserve the exact length and detail of the input. Do not condense.\n\n`;
+  }
 
-  return await generateText(prompt);
+  prompt += `TEXT TO REWRITE:\n---\n${cleanedText}\n---`;
+
+  return await generateText(prompt, { temperature: 0.7 });
 }
 
 module.exports = { rewrite };

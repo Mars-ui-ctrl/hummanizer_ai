@@ -1,14 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { getEngine } = require('../services/engines');
+const { processDocumentPipeline } = require('../services/chunker');
 
 /**
  * Method routes: POST /api/method1 through /api/method5
  *
- * Each route accepts { text } in the body, runs the corresponding
- * rewrite engine, and returns { result }.
- *
- * To add a new method, just add a new route here and create the engine file.
+ * Each route accepts { text } in the body, passes it through the
+ * chunking pipeline with the selected engine, and returns { result }.
  */
 const METHODS = [1, 2, 3, 4, 5];
 
@@ -24,15 +23,19 @@ METHODS.forEach((methodNum) => {
         });
       }
 
-      if (text.length > 100000) {
+      if (text.length > 200000) {
         return res.status(400).json({
           error: 'Text too long',
-          message: 'Text must be under 100,000 characters.',
+          message: 'Text must be under 200,000 characters.',
         });
       }
 
       const engine = getEngine(methodNum);
-      const result = await engine.rewrite(text.trim());
+
+      // Process full text through the modular chunking pipeline
+      const result = await processDocumentPipeline(text.trim(), (chunkText, contextText, isRetry) =>
+        engine.rewrite(chunkText, contextText, isRetry)
+      );
 
       res.json({ result, method: methodNum });
     } catch (error) {
