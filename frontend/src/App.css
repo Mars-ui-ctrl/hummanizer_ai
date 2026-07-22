@@ -1,0 +1,28 @@
+/* ============================================
+   APP LAYOUT
+   ============================================ */
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  min-height: 100vh;
+  transition: margin-left var(--transition-slow);
+}
+
+.app-main-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    margin-left: 0;
+    padding-top: 56px; /* Space for hamburger */
+  }
+}
