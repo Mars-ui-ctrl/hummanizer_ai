@@ -8,9 +8,10 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  * it falls back to the next.
  */
 const MODEL_CHAIN = [
+  'gemini-3.6-flash',
+  'gemini-3.6-flash-lite',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
 ];
 
 /**
@@ -47,8 +48,8 @@ async function generateText(prompt, options = {}) {
       const status = error.status || error.httpStatusCode;
       console.warn(`⚠ ${modelName} failed (${status || error.message}), trying next...`);
 
-      // Only fallback on rate limit (429) or unavailable (503) errors
-      if (status !== 429 && status !== 503) {
+      // Fallback on rate limit (429), unavailable (503), or not found (404) errors
+      if (status !== 429 && status !== 503 && status !== 404 && !error.message?.includes('404')) {
         throw error;
       }
     }
