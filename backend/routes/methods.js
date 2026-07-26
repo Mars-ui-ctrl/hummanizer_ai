@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { getEngine } = require('../services/engines');
-const { processDocumentPipeline } = require('../services/chunker');
+const { getMethodPipeline } = require('../services/pipeline/methods');
 
 /**
  * Method routes: POST /api/method1 through /api/method5
  *
  * Each route accepts { text } in the body, passes it through the
- * chunking pipeline with the selected engine, and returns { result }.
+ * multi-stage document processing pipeline for the selected method,
+ * and returns { result, method, report }.
  */
 const METHODS = [1, 2, 3, 4, 5];
 
@@ -30,20 +30,22 @@ METHODS.forEach((methodNum) => {
         });
       }
 
-      const engine = getEngine(methodNum);
+      const pipeline = getMethodPipeline(methodNum);
 
-      // Process full text through the modular chunking pipeline
-      const result = await processDocumentPipeline(text.trim(), (chunkText, contextText, isRetry) =>
-        engine.rewrite(chunkText, contextText, isRetry)
-      );
+      // Execute document processing pipeline
+      const { result, report } = await pipeline.run(text.trim());
 
-      res.json({ result, method: methodNum });
+      // Response preserves original contract while including evaluation report
+      res.json({
+        result,
+        method: methodNum,
+        report,
+      });
     } catch (error) {
       console.error(`Method ${methodNum} error:`, error);
       res.status(500).json({
         error: 'Rewrite failed',
-        message:
-          error.message || 'An error occurred while processing your text.',
+        message: error.message || 'An error occurred while processing your text.',
       });
     }
   });

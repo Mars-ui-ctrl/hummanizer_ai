@@ -8,9 +8,9 @@ const methods = [
   {
     id: 1,
     name: 'Method 1',
-    subtitle: 'Single Pass',
+    subtitle: 'Quick Rewrite',
     description:
-      'A single-pass rewrite focused on clarity, grammar, and readability.',
+      'Analysis → Rewrite → Validation. Fast full-sentence rewrite with quality checks.',
     path: '/method1',
     endpoint: '/method1',
     icon: '⚡',
@@ -18,9 +18,9 @@ const methods = [
   {
     id: 2,
     name: 'Method 2',
-    subtitle: 'Two Pass',
+    subtitle: 'Structural Rewrite',
     description:
-      'Rewrite then review — two AI passes for improved consistency and flow.',
+      'Restructures sentences and paragraphs programmatically before AI rewrite and validation.',
     path: '/method2',
     endpoint: '/method2',
     icon: '🔄',
@@ -28,9 +28,9 @@ const methods = [
   {
     id: 3,
     name: 'Method 3',
-    subtitle: 'Context-Aware',
+    subtitle: 'Lexical + Style',
     description:
-      'Document-level rewrite improving transitions and paragraph coherence.',
+      'Applies lexical diversification and structural transformation before rewrite, then refines style.',
     path: '/method3',
     endpoint: '/method3',
     icon: '🧠',
@@ -38,9 +38,9 @@ const methods = [
   {
     id: 4,
     name: 'Method 4',
-    subtitle: 'Clean & Rewrite',
+    subtitle: 'Style + Diversity',
     description:
-      'Pre-cleans formatting and punctuation, then rewrites with AI.',
+      'Full structural, rewrite, style refinement, and diversity passes for maximum writing variation.',
     path: '/method4',
     endpoint: '/method4',
     icon: '✨',
@@ -48,9 +48,9 @@ const methods = [
   {
     id: 5,
     name: 'Method 5',
-    subtitle: 'Best of Three',
+    subtitle: 'Full Pipeline',
     description:
-      'Generates three versions and automatically selects the highest quality result.',
+      'Complete 8-stage pipeline: analysis, structure, lexical, rewrite, style, diversity, polish, and validation.',
     path: '/method5',
     endpoint: '/method5',
     icon: '🏆',

@@ -1,13 +1,15 @@
 /**
  * AI Provider Index
  *
- * This file re-exports the active AI provider.
- * To switch providers, change the require path below.
- *
- * Example:
- *   const { generateText } = require('./openai');
- *   const { generateText } = require('./claude');
+ * Active provider: Google Gemini AI Provider (gemini.js — Model: gemini-2.5-flash)
  */
+
+// Active Gemini AI Provider:
 const { generateText } = require('./gemini');
+
+// Commented out alternative providers:
+// const { generateText } = require('./mimo');
+// const { generateText } = require('./glm');
+// const { generateText } = require('./deepseek');
 
 module.exports = { generateText };

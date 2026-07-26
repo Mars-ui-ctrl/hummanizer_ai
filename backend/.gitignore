@@ -1,14 +1,27 @@
 # Dependencies
 node_modules/
 
-# Environment variables
+# Environment Variables & Secrets
 .env
 .env.local
+.env.*
+*.pem
+*.key
 
-# Logs
+# Sensitive Prompts & Private Configs
+config/prompt.js
+prompts/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs & Temp
+logs/
 *.log
 npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
+uploads/
+temp/
+*.tmp
+*.bak
