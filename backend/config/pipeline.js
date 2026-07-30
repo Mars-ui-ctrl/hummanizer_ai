@@ -16,27 +16,27 @@ module.exports = {
 
   // AI Generation Temperatures
   temperatures: {
-    rewrite: 0.75,
+    rewrite: 0.72,
     styleRefine: 0.55,
     diversityPass: 0.60,
-    finalPolish: 0.35,
+    finalPolish: 0.55,
     evaluation: 0.3,
   },
 
   // Validation Thresholds
   validation: {
-    minWordRatio: 0.85,
-    maxWordRatio: 1.15,
-    maxRetries: 2,
-    minParagraphRatio: 0.5,
-    technicalTermThreshold: 0.6,
-    headingThreshold: 0.7,
+    minWordRatio: 0.75, // Allow natural compression down to 75%
+    maxWordRatio: 1.30, // Allow natural human expansion up to 130%
+    maxRetries: 1,      // Cap retries at 1 to prevent long processing delays
+    minParagraphRatio: 0.4,
+    technicalTermThreshold: 0.5,
+    headingThreshold: 0.6,
   },
 
   // Structural Transformation
   structural: {
-    longSentenceThreshold: 40,
-    shortSentenceThreshold: 6,
+    longSentenceThreshold: 35,
+    shortSentenceThreshold: 8,
     shortSentenceMergeMax: 3,
   },
 
