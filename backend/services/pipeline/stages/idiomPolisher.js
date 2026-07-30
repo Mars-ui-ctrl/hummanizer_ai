@@ -1,20 +1,17 @@
 /**
- * Stage — Idiomatic Expression & Tone Polish (Post-NLP AI Pass)
+ * Stage — Final Human Polish (Post-NLP AI Pass)
  *
- * AI-powered stage that runs AFTER the NLP transformations (entity variation
- * + sentence restructuring) to:
+ * The FINAL AI pass that runs AFTER all NLP transformations.
+ * Uses a DIFFERENT system instruction than the main rewriter to create
+ * a second layer of token distribution variation.
  *
- * 1. Replace remaining formal/stiff expressions with natural idiomatic phrasing
- * 2. Add subtle emotional markers where appropriate
- * 3. Insert natural transitional phrases between paragraphs
- * 4. Smooth any rough edges introduced by the NLP stages
- * 5. Enforce length preservation (must not summarize)
- *
- * This is the FINAL AI call — it polishes the NLP-transformed text
- * into seamless, natural human writing.
+ * This stage specifically targets:
+ * 1. Remaining AI-sounding sentence constructions
+ * 2. Overly uniform paragraph structures
+ * 3. Mechanical transitions between ideas
+ * 4. Generic academic filler phrases
  */
 
-const config = require('../../../config/pipeline');
 const AIProvider = require('../AIProvider');
 const Logger = require('../Logger');
 
@@ -23,29 +20,18 @@ function getWordCount(text) {
   return text.trim().split(/\s+/).length;
 }
 
-const IDIOM_POLISH_PROMPT = `You are performing a FINAL POLISH pass on a document that has already been rewritten.
+// This uses a DIFFERENT persona than the main rewriter to create variation
+const POLISH_SYSTEM_INSTRUCTION = `You are a sharp-eyed human editor making a final pass on a document. Your job is NOT to rewrite — the writing is already done. You're just smoothing rough spots and making it sound more natural.
 
-Your job is specifically to:
-
-1. IDIOMATIC PHRASING: Replace any remaining stiff, formal, or corporate-sounding expressions with natural, conversational alternatives. For example:
-   - "initiate the process" → "get things started"
-   - "facilitate communication" → "help people talk"
-   - "in the event that" → "if"
-   - "a significant portion of" → "a lot of"
-   - "prior to" → "before"
-   But ONLY where it fits the tone naturally. Don't force idioms where formal language is appropriate (technical writing, academic context).
-
-2. EMOTIONAL MARKERS: Add occasional, subtle human touches — a brief parenthetical aside, a personal observation, a rhetorical question. Use sparingly (2-3 per page maximum).
-
-3. TRANSITIONAL FLOW: Smooth any abrupt transitions between paragraphs. Use natural connectors like "Plus,", "On top of that,", "What's interesting is", "The thing is," — NOT formal ones like "Furthermore," or "Moreover,".
-
-4. SMOOTH ROUGH EDGES: Fix any awkward phrasing or grammatical issues without changing the meaning or structure.
-
-CRITICAL RULES:
-- Do NOT change any facts, names, numbers, dates, or technical terms.
-- Do NOT summarize or shorten the text. Preserve the EXACT same level of detail and length.
-- Do NOT add a conclusion paragraph or summary at the end.
-- Return ONLY the polished text. No commentary.`;
+Rules for your editing pass:
+- Fix any sentence that sounds robotic, stiff, or AI-generated
+- Replace formal connectors (Furthermore, Moreover, Additionally, Consequently) with natural ones (Plus, Also, On top of that, So, And)
+- Break up any paragraph that has too-uniform sentence lengths
+- Add an occasional dash, parenthetical aside, or short fragment for natural rhythm
+- If two sentences in a row start the same way, fix the second one
+- KEEP the same length — do not cut or summarize anything
+- KEEP all facts, numbers, names, and technical terms exactly as they are
+- Return ONLY the edited text`;
 
 const idiomPolisher = {
   name: 'idiomPolisher',
@@ -66,37 +52,35 @@ const idiomPolisher = {
       Logger.chunkProgress(this.name, i, chunks.length, { words: origWordCount });
 
       const prompt = [
-        IDIOM_POLISH_PROMPT,
+        `Edit this section (${origWordCount} words). Keep the same length. Fix anything that sounds AI-generated:`,
         '',
-        `TEXT TO POLISH (${origWordCount} words — output MUST be approximately the same length):`,
-        '---',
         chunk,
-        '---',
       ].join('\n');
 
       try {
         let polished = await AIProvider.generate(prompt, {
-          temperature: 0.6,
+          temperature: 0.55,
+          systemInstruction: POLISH_SYSTEM_INSTRUCTION,
         });
 
         const newWordCount = getWordCount(polished);
 
-        // Length guard: if polish pass shrunk the text too much, keep NLP version
+        // Length guard: if polish pass shrunk the text too much, keep previous version
         if (origWordCount > 50 && newWordCount < origWordCount * 0.75) {
-          Logger.warn(this.name, `Polish shrunk chunk ${i + 1} (${origWordCount} → ${newWordCount}), keeping NLP version`);
+          Logger.warn(this.name, `Polish shrunk chunk ${i + 1} (${origWordCount} → ${newWordCount}), keeping previous`);
           polishedChunks.push(chunk);
         } else {
           polishedChunks.push(polished.trim());
         }
       } catch (err) {
-        Logger.warn(this.name, `Polish failed for chunk ${i + 1}: ${err.message}, keeping NLP version`);
+        Logger.warn(this.name, `Polish failed for chunk ${i + 1}: ${err.message}, keeping previous`);
         polishedChunks.push(chunk);
       }
     }
 
     ctx.rewrittenChunks = polishedChunks;
 
-    Logger.info(this.name, `Idiom & tone polish complete`, {
+    Logger.info(this.name, `Final human polish complete`, {
       chunks: polishedChunks.length,
     });
   },

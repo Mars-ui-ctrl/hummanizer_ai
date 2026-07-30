@@ -1,10 +1,11 @@
 /**
- * Google Gemini AI Provider (Zero-AI-Detection & Multi-Model Quota Rotating)
+ * Google Gemini AI Provider
  *
- * Configured for maximum human perplexity and burstiness (0% AI Score).
- * Uses native systemInstruction with high temperature (0.95) & topP (0.95).
- * Rotates across all free-tier Gemini models (3.6-flash, 3.5-flash, 2.5-flash, 2.0-flash)
- * to maximize daily free quota.
+ * Uses native systemInstruction for persona-based humanization.
+ * Temperature 0.72 (not 0.95) — high enough for natural variety,
+ * low enough to avoid incoherent phrasings that detectors flag.
+ *
+ * Rotates across available Gemini models to maximize daily free quota.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -13,39 +14,36 @@ const { BASE_HUMANIZER_PROMPT } = require('../../config/prompt');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const MODEL_CHAIN = [
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
   'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-2.5-pro',
   'gemini-2.0-flash-lite',
-  'gemini-flash-latest',
 ];
 
 /**
- * Generate text using Google Gemini API with High Perplexity & Native System Instructions.
+ * Generate text using Google Gemini API with persona-based system instruction.
  *
- * @param {string} prompt - Document text to rewrite
+ * @param {string} prompt - Document text to process
  * @param {object} [options] - Optional config overrides
  * @returns {Promise<string>} - The humanized output
  */
 async function generateText(prompt, options = {}) {
-  // High temperature (0.95) & topP (0.95) force unpredictable, human-like word choices (Perplexity)
   const generationConfig = {
-    temperature: options.temperature ?? 0.95,
-    topP: options.topP ?? 0.95,
+    temperature: options.temperature ?? 0.72,
+    topP: options.topP ?? 0.90,
     maxOutputTokens: options.maxOutputTokens ?? 8192,
   };
+
+  // Allow callers to pass a custom system instruction, otherwise use base
+  const systemInstruction = options.systemInstruction || BASE_HUMANIZER_PROMPT;
 
   const models = options.model ? [options.model] : MODEL_CHAIN;
   let lastError = null;
 
   for (const modelName of models) {
     try {
-      // Pass base humanizer rules natively as systemInstruction
       const model = genAI.getGenerativeModel({
         model: modelName,
-        systemInstruction: BASE_HUMANIZER_PROMPT,
+        systemInstruction,
       });
 
       const result = await model.generateContent({
@@ -53,12 +51,12 @@ async function generateText(prompt, options = {}) {
         generationConfig,
       });
 
-      console.log(`✓ Used model: ${modelName} (temp: ${generationConfig.temperature}, systemInstruction active)`);
+      console.log(`✓ Used model: ${modelName} (temp: ${generationConfig.temperature})`);
       return result.response.text();
     } catch (error) {
       lastError = error;
       const status = error.status || error.httpStatusCode;
-      console.warn(`⚠ ${modelName} quota/error (${status || error.message.slice(0, 80)}), trying next model...`);
+      console.warn(`⚠ ${modelName} error (${status || error.message.slice(0, 80)}), trying next...`);
 
       if (
         status !== 429 &&
