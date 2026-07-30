@@ -2,14 +2,7 @@
  * Stage — Final Human Polish (Post-NLP AI Pass)
  *
  * The FINAL AI pass that runs AFTER all NLP transformations.
- * Uses a DIFFERENT system instruction than the main rewriter to create
- * a second layer of token distribution variation.
- *
- * This stage specifically targets:
- * 1. Remaining AI-sounding sentence constructions
- * 2. Overly uniform paragraph structures
- * 3. Mechanical transitions between ideas
- * 4. Generic academic filler phrases
+ * Uses an editor system instruction to ensure clean, natural human prose.
  */
 
 const AIProvider = require('../AIProvider');
@@ -20,18 +13,15 @@ function getWordCount(text) {
   return text.trim().split(/\s+/).length;
 }
 
-// This uses a DIFFERENT persona than the main rewriter to create variation
-const POLISH_SYSTEM_INSTRUCTION = `You are a sharp-eyed human editor making a final pass on a document. Your job is NOT to rewrite — the writing is already done. You're just smoothing rough spots and making it sound more natural.
+const POLISH_SYSTEM_INSTRUCTION = `You are an expert academic and professional copyeditor making a final polish pass.
 
-Rules for your editing pass:
-- Fix any sentence that sounds robotic, stiff, or AI-generated
-- Replace formal connectors (Furthermore, Moreover, Additionally, Consequently) with natural ones (Plus, Also, On top of that, So, And)
-- Break up any paragraph that has too-uniform sentence lengths
-- Add an occasional dash, parenthetical aside, or short fragment for natural rhythm
-- If two sentences in a row start the same way, fix the second one
-- KEEP the same length — do not cut or summarize anything
-- KEEP all facts, numbers, names, and technical terms exactly as they are
-- Return ONLY the edited text`;
+Editing Rules:
+- Remove any sentence that sounds robotic or AI-generated.
+- Remove stiff transition words (Furthermore, Moreover, Consequently) — replace with smooth sentence transitions or direct statements.
+- Never add conversational filler phrases ("I mean,", "you know,", "it's pretty clear that", "which is great,").
+- Ensure sentence lengths vary naturally within each paragraph.
+- PRESERVE length, detail level, numbers, dates, locations, names, and technical terms.
+- Return ONLY the polished text.`;
 
 const idiomPolisher = {
   name: 'idiomPolisher',
@@ -52,20 +42,19 @@ const idiomPolisher = {
       Logger.chunkProgress(this.name, i, chunks.length, { words: origWordCount });
 
       const prompt = [
-        `Edit this section (${origWordCount} words). Keep the same length. Fix anything that sounds AI-generated:`,
+        `Polish this section (${origWordCount} words). Keep the exact same length and details:`,
         '',
         chunk,
       ].join('\n');
 
       try {
         let polished = await AIProvider.generate(prompt, {
-          temperature: 0.55,
+          temperature: 0.50,
           systemInstruction: POLISH_SYSTEM_INSTRUCTION,
         });
 
         const newWordCount = getWordCount(polished);
 
-        // Length guard: if polish pass shrunk the text too much, keep previous version
         if (origWordCount > 50 && newWordCount < origWordCount * 0.75) {
           Logger.warn(this.name, `Polish shrunk chunk ${i + 1} (${origWordCount} → ${newWordCount}), keeping previous`);
           polishedChunks.push(chunk);
