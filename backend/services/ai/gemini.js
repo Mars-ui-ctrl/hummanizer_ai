@@ -1,9 +1,9 @@
 /**
- * Google Gemini AI Provider (with Auto 429 Rate-Limit Backoff & Model Chain)
+ * Google Gemini AI Provider (with Dynamic 429 Rate-Limit Recovery)
  *
- * Rotates across active Gemini models.
- * If all models hit 429 rate limits, it automatically sleeps for 12 seconds
- * to allow Gemini's free tier RPM window to reset, then retries automatically.
+ * Rotates across verified free-tier Gemini models (2.5-flash, 2.0-flash, 2.0-flash-lite).
+ * If free-tier rate limits (RPM/TPM 429) are encountered, parses Google's suggested
+ * retry delay (e.g. 15s–40s), sleeps, and automatically retries.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -15,18 +15,25 @@ const MODEL_CHAIN = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-pro-latest',
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Generate text using Google Gemini API with rate-limit backoff.
- *
- * @param {string} prompt - Document text to process
- * @param {object} [options] - Optional config overrides
- * @returns {Promise<string>} - The humanized output
+ * Extract suggested retry delay in ms from Google Generative AI 429 error messages.
+ */
+function extractRetryDelayMs(error) {
+  if (!error || !error.message) return 15000;
+  const match = error.message.match(/Please retry in ([\d.]+)\s*s/i);
+  if (match && match[1]) {
+    const seconds = parseFloat(match[1]);
+    return Math.min(Math.max(Math.ceil(seconds * 1000) + 1000, 5000), 45000);
+  }
+  return 15000;
+}
+
+/**
+ * Generate text using Google Gemini API with automatic rate-limit backoff recovery.
  */
 async function generateText(prompt, options = {}, attemptNumber = 1) {
   const generationConfig = {
@@ -55,29 +62,25 @@ async function generateText(prompt, options = {}, attemptNumber = 1) {
       console.log(`✓ Used model: ${modelName} (temp: ${generationConfig.temperature})`);
       return result.response.text();
     } catch (error) {
+      lastError = error;
       const status = error.status || error.httpStatusCode;
       const is429 = status === 429 || error.message?.includes('429') || error.message?.includes('Quota');
-      const is404 = status === 404 || error.message?.includes('404');
 
-      if (is429) hitRateLimit = true;
-
-      // Keep the most relevant error (prefer 429 over 404)
-      if (!lastError || is429) {
-        lastError = error;
-      }
-
-      console.warn(`⚠ ${modelName} ${is404 ? 'not supported (404)' : 'rate limit (429)'}, trying next model...`);
-
-      if (!is429 && !is404 && status !== 503 && !error.message?.includes('fetch failed')) {
-        throw error;
+      if (is429) {
+        hitRateLimit = true;
+        console.warn(`⚠ ${modelName} rate limited (429)`);
+      } else {
+        console.warn(`⚠ ${modelName} error (${status || error.message.slice(0, 60)})`);
       }
     }
   }
 
-  // If rate limits were hit, pause 12 seconds to let free-tier quota reset, then retry up to 3 times
+  // If rate limits were hit, extract Google's suggested retry delay and wait
   if (hitRateLimit && attemptNumber <= 3) {
-    console.warn(`⏳ Gemini free tier rate limit reached. Pausing 12 seconds before retry attempt ${attemptNumber}/3...`);
-    await sleep(12000);
+    const delayMs = extractRetryDelayMs(lastError);
+    const delaySec = Math.round(delayMs / 1000);
+    console.warn(`⏳ Gemini rate limit reached. Auto-pausing ${delaySec}s for quota window reset (attempt ${attemptNumber}/3)...`);
+    await sleep(delayMs);
     return generateText(prompt, options, attemptNumber + 1);
   }
 
