@@ -1,9 +1,9 @@
 /**
  * Google Gemini AI Provider (with Auto 429 Rate-Limit Backoff & Model Chain)
  *
- * Rotates across available Gemini models.
- * If all models hit 429 rate limits, it automatically sleeps for the requested delay
- * (5-10 seconds) and retries automatically instead of failing the pipeline.
+ * Rotates across active Gemini models.
+ * If all models hit 429 rate limits, it automatically sleeps for 12 seconds
+ * to allow Gemini's free tier RPM window to reset, then retries automatically.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -14,9 +14,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const MODEL_CHAIN = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-1.5-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-pro',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-pro-latest',
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,6 +38,7 @@ async function generateText(prompt, options = {}, attemptNumber = 1) {
   const systemInstruction = options.systemInstruction || BASE_HUMANIZER_PROMPT;
   const models = options.model ? [options.model] : MODEL_CHAIN;
   let lastError = null;
+  let hitRateLimit = false;
 
   for (const modelName of models) {
     try {
@@ -54,27 +55,29 @@ async function generateText(prompt, options = {}, attemptNumber = 1) {
       console.log(`✓ Used model: ${modelName} (temp: ${generationConfig.temperature})`);
       return result.response.text();
     } catch (error) {
-      lastError = error;
       const status = error.status || error.httpStatusCode;
-      console.warn(`⚠ ${modelName} rate/quota limit (${status || error.message.slice(0, 80)}), trying next model...`);
+      const is429 = status === 429 || error.message?.includes('429') || error.message?.includes('Quota');
+      const is404 = status === 404 || error.message?.includes('404');
 
-      if (
-        status !== 429 &&
-        status !== 503 &&
-        status !== 404 &&
-        !error.message?.includes('404') &&
-        !error.message?.includes('429') &&
-        !error.message?.includes('fetch failed')
-      ) {
+      if (is429) hitRateLimit = true;
+
+      // Keep the most relevant error (prefer 429 over 404)
+      if (!lastError || is429) {
+        lastError = error;
+      }
+
+      console.warn(`⚠ ${modelName} ${is404 ? 'not supported (404)' : 'rate limit (429)'}, trying next model...`);
+
+      if (!is429 && !is404 && status !== 503 && !error.message?.includes('fetch failed')) {
         throw error;
       }
     }
   }
 
-  // If all models in the chain hit rate limits (429/503), wait 9s and retry up to 2 times
-  if (attemptNumber <= 2) {
-    console.warn(`⏳ All Gemini models rate-limited (429). Pausing 9 seconds before retry attempt ${attemptNumber + 1}...`);
-    await sleep(9000);
+  // If rate limits were hit, pause 12 seconds to let free-tier quota reset, then retry up to 3 times
+  if (hitRateLimit && attemptNumber <= 3) {
+    console.warn(`⏳ Gemini free tier rate limit reached. Pausing 12 seconds before retry attempt ${attemptNumber}/3...`);
+    await sleep(12000);
     return generateText(prompt, options, attemptNumber + 1);
   }
 
