@@ -1,11 +1,10 @@
 /**
- * Stage 8 — Assembler
+ * Stage 7 — Document Assembler (Pure JS)
  *
- * Merges rewritten chunks while preserving:
+ * Merges processed chunks while preserving:
  * - Original chunk order
- * - Paragraph spacing (\n\n)
+ * - Clean double-newline paragraph spacing (\n\n)
  * - Headings and list structures
- * - Document flow as a continuous piece
  */
 
 const Logger = require('../Logger');
@@ -22,16 +21,13 @@ const assembler = {
       return;
     }
 
-    // Clean and join chunks with standard double newline separation
     const cleanedChunks = chunks.map(chunk => {
       let t = (chunk || '').trim();
-      // Normalize internal whitespace
       t = t.replace(/\n{3,}/g, '\n\n');
       return t;
     });
 
     const finalDocument = cleanedChunks.join('\n\n').trim();
-
     ctx.result = finalDocument;
 
     Logger.info(this.name, `Assembled ${chunks.length} chunk(s) into final document (${finalDocument.length} chars)`);

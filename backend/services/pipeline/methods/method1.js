@@ -1,43 +1,35 @@
 /**
- * Method 1 — Anti-Detection Multi-Stage Humanizer Pipeline (Streamlined Single AI Pass)
- *
- * Streamlined to 1 single AI pass per chunk to guarantee zero 429 rate limits even on 5k+ word PDFs,
- * followed by pure JS NLP post-processing passes.
+ * Method 1 — 7-Stage Anti-Detection Pipeline
  *
  * Sequence:
- * 1. Analyzer            — Document analysis (entities, terms, structure)
- * 2. Chunker             — Paragraph-boundary chunking with context overlap
- * 3. Rewriter            — Core AI humanization pass (1 AI call per chunk)
- * 4. Entity Variation    — Pure JS NLP entity detection & descriptive phrase substitution (0ms)
- * 5. Sentence Restr.     — Pure JS sentence burstiness, contractions & opener variation (0ms)
- * 6. Human Imperfection  — Pure JS human syntactic noise (dropped 'that', openers, em-dashes) (0ms)
- * 7. AI Phrase Cleaner   — Pure JS regex engine stripping 100+ AI conversational templates (0ms)
- * 8. Validator           — Pure JS rule-based quality checks (words, names, numbers, headings) (0ms)
- * 9. Assembler           — Pure JS chunk reassembly into final document (0ms)
+ * 1. Semantic Chunker      (Pure JS: ~800-1000 word paragraph boundary chunking, 1-sentence overlap)
+ * 2. Pass 1 Destructor     (AI Pass 1: Gemini 0.85 Temp / 0.90 TopP - Structural Destruction & Fact Lock)
+ * 3. Pass 2 Normalizer     (AI Pass 2: Gemini 0.60 Temp / 0.85 TopP - Perplexity Normalization & 2 AM Student Voice)
+ * 4. Lexical Diversifier   (Pure JS: High to Low probability AI-word replacement with capitalization preservation)
+ * 5. Burstiness Enforcer   (Pure JS: Paragraph rhythm [micro-sentence] + [compound run-on sentence])
+ * 6. Fact & Format Valid.  (Pure JS: Verifies all numbers/dates exist & word count ratio is 85%-130%)
+ * 7. Document Assembler    (Pure JS: Double-newline chunk stitching)
  */
+
 const PipelineRunner = require('../PipelineRunner');
-const analyzer = require('../stages/analyzer');
 const chunker = require('../stages/chunker');
-const rewriter = require('../stages/rewriter');
-const entityVariation = require('../stages/entityVariation');
-const sentenceRestructurer = require('../stages/sentenceRestructurer');
-const humanImperfection = require('../stages/humanImperfection');
-const aiPhraseCleaner = require('../stages/aiPhraseCleaner');
+const pass1Destructor = require('../stages/pass1Destructor');
+const pass2Normalizer = require('../stages/pass2Normalizer');
+const lexicalDiversifier = require('../stages/lexicalDiversifier');
+const burstinessEnforcer = require('../stages/burstinessEnforcer');
 const validator = require('../stages/validator');
 const assembler = require('../stages/assembler');
 
 const stages = [
-  analyzer,
   chunker,
-  rewriter,
-  entityVariation,
-  sentenceRestructurer,
-  humanImperfection,
-  aiPhraseCleaner,
+  pass1Destructor,
+  pass2Normalizer,
+  lexicalDiversifier,
+  burstinessEnforcer,
   validator,
   assembler,
 ];
 
-const runner = new PipelineRunner('Method 1: Streamlined Anti-Detection Humanizer', stages);
+const runner = new PipelineRunner('Method 1: 7-Stage Anti-Detection Pipeline', stages);
 
 module.exports = { run: (text, opts) => runner.run(text, 1, opts), stages };

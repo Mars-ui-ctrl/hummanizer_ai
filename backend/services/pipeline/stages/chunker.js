@@ -1,10 +1,9 @@
 /**
- * Stage 4 — Chunker
+ * Stage 1 — Semantic Chunker (Pure JS)
  *
- * Splits large documents into manageable chunks for AI processing.
- * Splits ONLY at paragraph boundaries. Never splits mid-sentence.
- * Includes contextual overlap between adjacent chunks.
- * Completely independent from the rewrite engine.
+ * Splits documents at natural paragraph boundaries (\n\n). Never splits mid-sentence.
+ * Target chunk size: 800-1000 words.
+ * Includes a 1-sentence trailing overlap for context continuity.
  */
 
 const config = require('../../../config/pipeline');
@@ -15,42 +14,36 @@ function getWordCount(text) {
   return text.trim().split(/\s+/).length;
 }
 
-/**
- * Extract trailing context (last N sentences) from a chunk
- * for continuity with the next chunk.
- */
-function getTrailingContext(text) {
+function getTrailingSentence(text) {
   if (!text) return '';
   const paragraphs = text.trim().split(/\n\n+/);
   const lastParagraph = paragraphs[paragraphs.length - 1] || '';
   const sentences = lastParagraph.match(/[^.!?]+[.!?]+/g) || [lastParagraph];
-  const trailing = sentences.slice(-config.chunking.overlapSentences).join(' ').trim();
-  return trailing.length > 20 ? trailing : '';
+  const lastSentence = (sentences[sentences.length - 1] || '').trim();
+  return lastSentence.length > 15 ? lastSentence : '';
 }
 
 const chunker = {
   name: 'chunker',
 
   async execute(ctx) {
-    // Use the cleanest available text
-    const text = ctx.cleanText || ctx.extractedText || ctx.rawText || '';
+    const text = (ctx.cleanText || ctx.extractedText || ctx.rawText || '').trim();
     const totalWords = getWordCount(text);
-    const target = config.chunking.targetWords;
+    const target = config.chunking.targetWords || 900;
 
-    // If document is small enough, treat as single chunk
+    // Small document -> single chunk
     if (totalWords <= target + 200) {
       ctx.chunks = [{
-        text: text.trim(),
+        text,
         context: '',
         index: 0,
         originalWordCount: totalWords,
       }];
       ctx.chunksProcessed = 1;
-      Logger.info(this.name, `Single chunk (${totalWords} words)`);
+      Logger.info(this.name, `Single semantic chunk (${totalWords} words)`);
       return;
     }
 
-    // Split at paragraph boundaries
     const rawParagraphs = text.split(/\n\n+/);
     const chunks = [];
     let currentParagraphs = [];
@@ -65,10 +58,9 @@ const chunker = {
       currentParagraphs.push(para);
       currentWordCount += paraWords;
 
-      // Lock chunk when target reached or at end of document
       if (currentWordCount >= target || i === rawParagraphs.length - 1) {
         const chunkText = currentParagraphs.join('\n\n');
-        const context = getTrailingContext(previousChunkText);
+        const context = getTrailingSentence(previousChunkText);
 
         chunks.push({
           text: chunkText,
@@ -83,7 +75,7 @@ const chunker = {
       }
     }
 
-    // Merge leftover short paragraphs into the last chunk
+    // Merge leftover short paragraphs into last chunk
     if (currentParagraphs.length > 0 && chunks.length > 0) {
       const leftover = currentParagraphs.join('\n\n');
       chunks[chunks.length - 1].text += '\n\n' + leftover;
@@ -101,7 +93,7 @@ const chunker = {
     ctx.chunks = chunks;
     ctx.chunksProcessed = chunks.length;
 
-    Logger.info(this.name, `Split into ${chunks.length} chunks`, {
+    Logger.info(this.name, `Split into ${chunks.length} semantic chunks`, {
       totalWords,
       avgChunkWords: Math.round(totalWords / chunks.length),
     });

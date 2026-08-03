@@ -1,18 +1,13 @@
 /**
- * Google Gemini AI Provider (with Multi-Key Rotation, Dynamic 429 Recovery, & Request Pacing)
+ * Google Gemini AI Provider (Multi-Key Rotation & 429 Recovery)
  *
- * Key Features:
- * 1. Multi-API-Key Pool: Rotates keys automatically if GEMINI_API_KEY contains comma-separated keys
- *    or if extra keys (GEMINI_API_KEY_1, GEMINI_API_KEY_2) are defined.
- * 2. Multi-Model Fallback: Rotates across gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash.
- * 3. Inter-Call Pacing: Enforces a 1.5s minimum gap between consecutive AI requests to prevent bursting past 15 RPM.
- * 4. Dynamic Backoff: If all keys/models hit 429, parses Google's retry delay and sleeps before retrying.
+ * Automatically rotates across available API keys from environment variables.
+ * Supports comma-separated keys in GEMINI_API_KEY or GEMINI_API_KEY_1, GEMINI_API_KEY_2...
+ * If Key 1 hits a 429 rate limit, it switches to Key 2 INSTANTLY.
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { BASE_HUMANIZER_PROMPT } = require('../../config/prompt');
-
-// ─── Build API Key Pool ────────────────────────────────────────────
 
 function getApiKeyPool() {
   const keys = [];
@@ -37,32 +32,21 @@ function getApiKeyPool() {
 }
 
 let activeKeyIndex = 0;
-const MODEL_CHAIN = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+const MODEL_CHAIN = ['gemini-2.5-flash', 'gemini-2.0-flash'];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Inter-request rate limiter (prevents >15 RPM bursts)
 let lastCallTimestamp = 0;
 async function paceRequests() {
   const now = Date.now();
   const elapsed = now - lastCallTimestamp;
-  if (elapsed < 1500) {
-    await sleep(1500 - elapsed);
+  if (elapsed < 1200) {
+    await sleep(1200 - elapsed);
   }
   lastCallTimestamp = Date.now();
 }
 
-function extractRetryDelayMs(error) {
-  if (!error || !error.message) return 15000;
-  const match = error.message.match(/Please retry in ([\d.]+)\s*s/i);
-  if (match && match[1]) {
-    const seconds = parseFloat(match[1]);
-    return Math.min(Math.max(Math.ceil(seconds * 1000) + 1000, 5000), 45000);
-  }
-  return 15000;
-}
-
 /**
- * Generate text using Google Gemini API with key rotation and backoff.
+ * Generate text using Google Gemini API with instant multi-key rotation.
  */
 async function generateText(prompt, options = {}, attemptNumber = 1) {
   await paceRequests();
@@ -100,9 +84,8 @@ async function generateText(prompt, options = {}, attemptNumber = 1) {
           generationConfig,
         });
 
-        // Set successful key as current primary
         activeKeyIndex = keyIdx;
-        console.log(`✓ Used model: ${modelName} (key #${keyIdx + 1}/${keys.length}, temp: ${generationConfig.temperature})`);
+        console.log(`✓ Used model: ${modelName} (Key #${keyIdx + 1}/${keys.length})`);
         return result.response.text();
       } catch (error) {
         lastError = error;
@@ -111,25 +94,17 @@ async function generateText(prompt, options = {}, attemptNumber = 1) {
 
         if (is429) {
           hitRateLimit = true;
-          console.warn(`⚠ Key #${keyIdx + 1} / ${modelName} rate limited (429)`);
-        } else {
-          console.warn(`⚠ Key #${keyIdx + 1} / ${modelName} error (${status || error.message.slice(0, 60)})`);
+          console.warn(`⚠ Key #${keyIdx + 1} (${modelName}) 429 rate limited, switching key...`);
+          break; // Break inner model loop to try next API KEY immediately!
         }
       }
     }
-
-    // If this key hit 429, try next key in pool
-    if (keys.length > 1) {
-      console.warn(`↻ Key #${keyIdx + 1} rate limited. Rotating to key #${((keyIdx + 1) % keys.length) + 1}...`);
-    }
   }
 
-  // If all keys and models hit rate limits, wait for quota reset and retry
+  // If all keys in the pool hit 429 rate limits, pause 15 seconds for quota reset and retry
   if (hitRateLimit && attemptNumber <= 3) {
-    const delayMs = extractRetryDelayMs(lastError);
-    const delaySec = Math.round(delayMs / 1000);
-    console.warn(`⏳ All API keys rate limited. Auto-pausing ${delaySec}s for quota window reset (attempt ${attemptNumber}/3)...`);
-    await sleep(delayMs);
+    console.warn(`⏳ All API keys rate limited (429). Auto-pausing 15s for quota reset (attempt ${attemptNumber}/3)...`);
+    await sleep(15000);
     return generateText(prompt, options, attemptNumber + 1);
   }
 
